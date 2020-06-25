@@ -1,0 +1,14 @@
+{
+    "clientID": "",
+    "clientSecret": "",
+    "tenantID": "",
+    "senderID": "",
+    "receiverID": [""],
+    "password": "",
+    "serverAddress": "smtp.office365.com",
+    "port": 587,
+    "storageAccountName": "",
+    "storageAccountKey": "",
+    "lowerLimit": 8000,
+    "upperLimit": 30000
+}
