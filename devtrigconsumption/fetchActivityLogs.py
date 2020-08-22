@@ -17,9 +17,9 @@ def getActivityLogs(subscriptionID, instanceID, startDate, endDate, bearerToken)
         if response.status_code != 200:
             logging.error(
                 f'Response Code: {response.status_code}::Subscription{subscriptionID}')
-        else:
-            logging.info(
-                f'Successfully fetched all Subscriptions Details')
+        # else:
+        #     logging.info(
+        #         f'Successfully fetched all Subscriptions Details')
     except Exception as err:
         logging.error(err)
     return response

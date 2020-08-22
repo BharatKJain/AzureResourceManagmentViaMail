@@ -2,13 +2,14 @@
     This is main file for code.
 """
 # Importing libraries
-import datetime
+# import datetime
 import logging
 import json
 import requests
 import smtplib
 import ssl
 import os
+from datetime import datetime
 from tabulate import tabulate
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -24,6 +25,9 @@ from .fetchBillingPeriod import getBillingPeriod
 from .sendMail import sendMail
 from .fetchActivityLogs import getActivityLogs
 from .updateBlobJson import updateBillingPeriod
+
+logging.basicConfig(format='%(asctime)s|%(filename)s|%(funcName)s|%(lineno)s: %(message)s',
+                    level=logging.INFO)
 
 # Importing credentials
 try:
@@ -46,6 +50,10 @@ except Exception as err:
     logging.error(err)
 
 
+def checkDate(string):
+    return datetime(int(string[0:4]), int(string[5:7]), int(string[8:10]))
+
+
 def filterActivityLogs(subscriptionID, instanceID, startDate, endDate, accessToken):
     """
         This function gets creator name of given instance, by filtering through the Activity Logs
@@ -63,9 +71,13 @@ def filterActivityLogs(subscriptionID, instanceID, startDate, endDate, accessTok
         data = json.loads(getData(data.get("nextLink"), accessToken).text)
     # Checking for caller in last value of array
     try:
-        callerName = data['value'][-1]['caller']
+        if 'value' in data and len(data['value'])!=0:
+            callerName = data['value'][-1]['caller']
+        else:
+            callerName="Not Found"
     except Exception as err:
         logging.error(f'ERROR:filterActivityLogs() callerName::{err}')
+        # print(data)
 
     return callerName
 
@@ -90,36 +102,35 @@ def resourceData(subscription, startDate, endDate, accessToken):
             usageRawData = {}
             logging.info(
                 f"Executing the nextLink in Usage Details API for subscription : {subscription}")
-
         try:
             usageRawData = json.loads(getData(url, accessToken).text)
         except Exception as err:
             logging.error(err)
-
         for resource in usageRawData.get("value"):
-            if resource.get('properties').get('instanceId') in uniqueResourcesDetails:
-                # updating cost
-                uniqueResourcesDetails.get(resource.get('properties').get('instanceId'))[
-                    1] += resource.get('properties').get("pretaxCost")
-            else:
-                # Appending resources list
-                data = {resource.get('properties').get('instanceId'): [resource.get('properties').get('instanceId'), resource.get(
-                    'properties').get('pretaxCost'), resource.get('properties').get('currency'), resource.get('properties').get('instanceId').split('/')[4], resource.get('tags'), filterActivityLogs(subscription, resource.get('properties').get('instanceId'), startDate, endDate, accessToken), resource.get('properties').get('offerId')]}
-                uniqueResourcesDetails.update(data)
+            # print(resource.get('properties').get('usageStart')[:10])
+            if checkDate(resource.get('properties').get('usageStart')[:10]) >= checkDate(startDate):
+                if resource.get('properties').get('instanceId') in uniqueResourcesDetails:
+                    # updating cost
+                    uniqueResourcesDetails.get(resource.get('properties').get('instanceId'))[
+                        1] += resource.get('properties').get("pretaxCost")
+                else:
+                    # Appending resources list
+                    uniqueResourcesDetails[resource.get('properties').get('instanceId')] = [resource.get('properties').get('instanceId'), resource.get('properties').get("pretaxCost"), resource.get('properties').get('currency'), resource.get('properties').get('instanceId').split(
+                        '/')[4], resource.get('tags'), filterActivityLogs(subscription, resource.get('properties').get('instanceId'), startDate, endDate, accessToken), resource.get('properties').get('offerId')]
 
     return uniqueResourcesDetails
 
 # def main(mytimer: func.TimerRequest) -> None:
 
 
+# def main():
 def main(mytimer: func.TimerRequest) -> None:
-    utc_timestamp = datetime.datetime.utcnow().replace(
-        tzinfo=datetime.timezone.utc).isoformat()
+    # utc_timestamp = datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc).isoformat()
 
     if mytimer.past_due:
         logging.info('The timer is past due!')
 
-    logging.info('Python timer trigger function ran at %s', utc_timestamp)
+    # logging.info('Python timer trigger function ran at %s', utc_timestamp)
 
     # Declaring Variables
     global subBlobCheck
@@ -131,7 +142,7 @@ def main(mytimer: func.TimerRequest) -> None:
             "clientSecret"), credentials.get("tenantID")).text).get("access_token")
     except Exception as err:
         logging.error(err)
-
+    # print(accessToken)
     # Fetching all subscription
     try:
         subscriptionsData = json.loads(
@@ -141,7 +152,7 @@ def main(mytimer: func.TimerRequest) -> None:
     for subName in subscriptionsData:
         subscriptionsList.update(
             {subName.get("displayName"): subName.get("subscriptionId")})
-
+    # print(subscriptionsData)
     # Update the subs.json in Blob to current billin period
     try:
         subBlobCheck = updateBillingPeriod(
@@ -150,7 +161,7 @@ def main(mytimer: func.TimerRequest) -> None:
             "INFO:Updated the subBlobCheck using updateBillingPeriod()")
     except Exception as err:
         logging.error(f"ERROR:updateBillingPeriod() call::{err}")
-
+    # print(subBlobCheck)
     # Formatting data and sending mail
     for subscription in subscriptionsList:
         logging.info(f'subscription: {subscription}')
@@ -161,7 +172,6 @@ def main(mytimer: func.TimerRequest) -> None:
         # Fetching subscription data
         Data = resourceData(subscriptionsList.get(subscription), billingData.get(
             'billingPeriodStartDate'), billingData.get('billingPeriodEndDate'), accessToken)
-
         # Calculating toal cost
         totalCost = sum([value[1] for key, value in Data.items()])
         logging.info(totalCost)
